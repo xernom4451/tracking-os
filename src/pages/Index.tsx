@@ -1,18 +1,22 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SearchSection from "@/components/SearchSection";
 import SummaryCard from "@/components/SummaryCard";
 import ProgressStepper from "@/components/ProgressStepper";
 import DocumentList from "@/components/DocumentList";
 import Timeline from "@/components/Timeline";
-import { mockSubmission } from "@/data/mockData";
+import { useSubmissions, type AdminSubmission } from "@/contexts/SubmissionContext";
+import { LogIn } from "lucide-react";
 
 const Index = () => {
-  const [submission, setSubmission] = useState<typeof mockSubmission | null>(null);
+  const [submission, setSubmission] = useState<AdminSubmission | null>(null);
+  const { findByNumber } = useSubmissions();
+  const navigate = useNavigate();
 
   const handleSearch = (query: string) => {
-    // Mock: always show data for demo
     if (query.trim()) {
-      setSubmission(mockSubmission);
+      const found = findByNumber(query.trim());
+      setSubmission(found || null);
     }
   };
 
@@ -27,7 +31,16 @@ const Index = () => {
             </div>
             <span className="font-heading font-semibold text-foreground text-sm">Sistem Tracking PB UMKU</span>
           </div>
-          <span className="text-xs text-muted-foreground hidden sm:block">Kementerian Ketenagakerjaan RI</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground hidden sm:block">Kementerian Ketenagakerjaan RI</span>
+            <button
+              onClick={() => navigate("/admin/login")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors ml-3"
+            >
+              <LogIn className="w-3 h-3" />
+              Login Admin
+            </button>
+          </div>
         </div>
       </header>
 
