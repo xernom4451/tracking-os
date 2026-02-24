@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubmissions } from "@/contexts/SubmissionContext";
+import { deriveStages, deriveDisplayStatus } from "@/data/mockData";
 import { FileText, Search, CheckCircle2, Clock, LogOut } from "lucide-react";
+import type { DisplayStatusType } from "@/data/mockData";
 
-const statusLabel: Record<string, { text: string; className: string }> = {
+const statusLabel: Record<DisplayStatusType, { text: string; className: string }> = {
   completed: { text: "Selesai", className: "bg-status-completed-bg text-status-completed" },
   active: { text: "Sedang Diproses", className: "bg-status-active-bg text-status-active" },
   revision: { text: "Perlu Perbaikan", className: "bg-status-revision-bg text-status-revision" },
@@ -17,9 +19,18 @@ const AdminDashboard = () => {
 
   const stats = {
     total: submissions.length,
-    verifikasi: submissions.filter((s) => s.stages.some((st) => st.label === "Verifikasi Dokumen" && st.status === "active")).length,
-    peninjauan: submissions.filter((s) => s.stages.some((st) => st.label === "Peninjauan" && st.status === "active")).length,
-    terbit: submissions.filter((s) => s.currentStatusType === "completed").length,
+    verifikasi: submissions.filter((s) => {
+      const stages = deriveStages(s);
+      return stages[1].status === "active";
+    }).length,
+    peninjauan: submissions.filter((s) => {
+      const stages = deriveStages(s);
+      return stages[2].status === "active";
+    }).length,
+    terbit: submissions.filter((s) => {
+      const stages = deriveStages(s);
+      return stages.every((st) => st.status === "completed");
+    }).length,
   };
 
   const statCards = [
@@ -40,10 +51,7 @@ const AdminDashboard = () => {
             <span className="font-heading font-semibold text-foreground text-sm">Sistem Tracking PB UMKU</span>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/")}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button onClick={() => navigate("/")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Halaman Tracking
             </button>
             <button
@@ -60,7 +68,6 @@ const AdminDashboard = () => {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-heading font-bold text-foreground mb-8">Dashboard Admin – Tracking PB UMKU</h1>
 
-        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {statCards.map((card) => (
             <div key={card.label} className="bg-card rounded-xl border border-border shadow-sm p-5">
@@ -73,7 +80,6 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Table */}
         <div className="bg-card rounded-xl border border-border shadow-sm">
           <div className="p-6 border-b border-border">
             <h2 className="text-lg font-heading font-bold text-foreground">Daftar Permohonan</h2>
@@ -92,12 +98,13 @@ const AdminDashboard = () => {
               </thead>
               <tbody>
                 {submissions.map((s) => {
-                  const st = statusLabel[s.currentStatusType] || statusLabel.pending;
+                  const display = deriveDisplayStatus(s);
+                  const st = statusLabel[display.type];
                   return (
                     <tr key={s.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-6 py-4 font-medium text-foreground">{s.submissionNumber}</td>
                       <td className="px-6 py-4 text-foreground">{s.organizationName}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{s.currentStatus}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{display.label}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${st.className}`}>
                           {st.text}
