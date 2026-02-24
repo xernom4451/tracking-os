@@ -3,13 +3,15 @@ import { useNavigate } from "react-router-dom";
 import SearchSection from "@/components/SearchSection";
 import SummaryCard from "@/components/SummaryCard";
 import ProgressStepper from "@/components/ProgressStepper";
-import DocumentList from "@/components/DocumentList";
+import StageDetailUser from "@/components/StageDetailUser";
 import Timeline from "@/components/Timeline";
 import { useSubmissions, type AdminSubmission } from "@/contexts/SubmissionContext";
+import { deriveStages, deriveDisplayStatus, getActiveStageIndex } from "@/data/mockData";
 import { LogIn } from "lucide-react";
 
 const Index = () => {
   const [submission, setSubmission] = useState<AdminSubmission | null>(null);
+  const [selectedStage, setSelectedStage] = useState(0);
   const { findByNumber } = useSubmissions();
   const navigate = useNavigate();
 
@@ -17,12 +19,17 @@ const Index = () => {
     if (query.trim()) {
       const found = findByNumber(query.trim());
       setSubmission(found || null);
+      if (found) {
+        setSelectedStage(getActiveStageIndex(found));
+      }
     }
   };
 
+  const stages = submission ? deriveStages(submission) : [];
+  const displayStatus = submission ? deriveDisplayStatus(submission) : null;
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header Bar */}
       <header className="bg-card border-b border-border px-4 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -46,20 +53,19 @@ const Index = () => {
 
       <SearchSection onSearch={handleSearch} />
 
-      {submission && (
+      {submission && displayStatus && (
         <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
           <SummaryCard
             submissionNumber={submission.submissionNumber}
             organizationName={submission.organizationName}
-            currentStatus={submission.currentStatus}
-            currentStatusType={submission.currentStatusType}
-            currentStage={submission.currentStage}
+            currentStatus={displayStatus.label}
+            currentStatusType={displayStatus.type}
             lastUpdated={submission.lastUpdated}
           />
-          <ProgressStepper stages={submission.stages} />
+          <ProgressStepper stages={stages} selectedIndex={selectedStage} onStageClick={setSelectedStage} />
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-3">
-              <DocumentList documents={submission.documents} />
+              <StageDetailUser submission={submission} stageIndex={selectedStage} stages={stages} />
             </div>
             <div className="lg:col-span-2">
               <Timeline events={submission.timeline} />

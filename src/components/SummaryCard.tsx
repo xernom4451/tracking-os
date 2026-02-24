@@ -1,16 +1,15 @@
 import { Building2, Clock, Hash, Activity } from "lucide-react";
-import type { StageStatus } from "@/data/mockData";
+import type { DisplayStatusType } from "@/data/mockData";
 
 interface SummaryCardProps {
   submissionNumber: string;
   organizationName: string;
   currentStatus: string;
-  currentStatusType: StageStatus;
-  currentStage: string;
+  currentStatusType: DisplayStatusType;
   lastUpdated: string;
 }
 
-const statusBadgeClasses: Record<StageStatus, string> = {
+const statusBadgeClasses: Record<DisplayStatusType, string> = {
   completed: "bg-status-completed-bg text-status-completed",
   active: "bg-status-active-bg text-status-active",
   pending: "bg-status-pending-bg text-status-pending",
@@ -22,7 +21,6 @@ const SummaryCard = ({
   organizationName,
   currentStatus,
   currentStatusType,
-  currentStage,
   lastUpdated,
 }: SummaryCardProps) => {
   return (
@@ -33,13 +31,13 @@ const SummaryCard = ({
           <p className="text-lg font-heading font-bold text-foreground">{submissionNumber}</p>
         </div>
         <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-semibold ${statusBadgeClasses[currentStatusType]}`}>
-          <span className="w-2 h-2 rounded-full bg-current mr-2 animate-pulse-soft" />
+          <span className="w-2 h-2 rounded-full bg-current mr-2" />
           {currentStatus}
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <InfoItem icon={Building2} label="Nama LPK" value={organizationName} />
-        <InfoItem icon={Activity} label="Tahap Saat Ini" value={currentStage} />
+        <InfoItem icon={Activity} label="Status" value={currentStatus} />
         <InfoItem icon={Clock} label="Terakhir Diperbarui" value={lastUpdated} />
       </div>
     </div>
