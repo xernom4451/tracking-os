@@ -1,90 +1,163 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { useSubmissions } from "@/contexts/SubmissionContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { deriveStages, getActiveStageIndex } from "@/data/mockData";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { useSubmissions } from "@/contexts/useSubmissions";
+import { deriveDisplayStatus, deriveLicenseStatusLabel, deriveStages, getActiveStageIndex } from "@/data/mockData";
+import { ArrowLeft } from "lucide-react";
+import EmptyState from "@/components/EmptyState";
 import ProgressStepper from "@/components/ProgressStepper";
-import StageDetailAdmin from "@/components/StageDetailAdmin";
+import AppHeader from "@/components/AppHeader";
+import SummaryCard from "@/components/SummaryCard";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const StageDetailAdmin = lazy(() => import("@/components/StageDetailAdmin"));
 
 const AdminKelola = () => {
   const { id } = useParams<{ id: string }>();
-  const { getSubmission } = useSubmissions();
-  const { logout } = useAuth();
+  const { getSubmission, isLoadingSubmissions } = useSubmissions();
   const navigate = useNavigate();
 
   const submission = getSubmission(id || "");
+  const displayStatus = submission ? deriveDisplayStatus(submission) : null;
   const stages = submission ? deriveStages(submission) : [];
   const [selectedStage, setSelectedStage] = useState(() =>
     submission ? getActiveStageIndex(submission) : 0
   );
+  const [isStageLoading, setIsStageLoading] = useState(false);
+  const stageTimeoutRef = useRef<number | null>(null);
 
-  if (!submission) {
+  useEffect(() => {
+    if (!submission) return;
+    setSelectedStage(getActiveStageIndex(submission));
+    setIsStageLoading(false);
+  }, [submission]);
+
+  useEffect(() => {
+    return () => {
+      if (stageTimeoutRef.current) {
+        window.clearTimeout(stageTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleStageClick = (index: number) => {
+    if (!submission) return;
+    const nextStage = stages[index];
+    if (!nextStage || nextStage.status === "locked" || index === selectedStage) return;
+
+    setSelectedStage(index);
+    setIsStageLoading(true);
+
+    if (stageTimeoutRef.current) {
+      window.clearTimeout(stageTimeoutRef.current);
+    }
+
+    stageTimeoutRef.current = window.setTimeout(() => {
+      setIsStageLoading(false);
+    }, 180);
+  };
+
+  if (!submission && isLoadingSubmissions) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Permohonan tidak ditemukan.</p>
+      <div className="min-h-screen bg-slate-50">
+        <AppHeader variant="admin" />
+        <main className="max-w-6xl mx-auto px-4 py-8 sm:px-6">
+          <AdminStageDetailSkeleton />
+        </main>
       </div>
     );
   }
 
+  if (!submission) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <AppHeader variant="admin" />
+        <main className="max-w-4xl mx-auto px-4 py-12 sm:py-16">
+          <div className="app-surface-card p-6 sm:p-10">
+            <EmptyState
+              title="Data permohonan tidak ditemukan"
+              description="Permohonan yang Anda buka tidak tersedia atau sudah tidak ada di daftar."
+              action={(
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin")}
+                  className="app-primary-button inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold"
+                >
+                  Kembali ke Dashboard Admin
+                </button>
+              )}
+            />
+          </div>
+      </main>
+    </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-card border-b border-border px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-heading font-bold text-sm">PB</span>
-            </div>
-            <span className="font-heading font-semibold text-foreground text-sm">Sistem Tracking PB UMKU</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/admin")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-              Dashboard
-            </button>
-            <button
-              onClick={() => { logout(); navigate("/"); }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-status-revision hover:bg-status-revision-bg rounded-lg transition-colors"
-            >
-              <LogOut className="w-3 h-3" />
-              Keluar
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50 relative overflow-clip">
+      {/* Decorative background blur */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/3 pointer-events-none" />
 
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/admin")} className="p-2 rounded-lg hover:bg-secondary transition-colors">
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <h1 className="text-xl font-heading font-bold text-foreground">Kelola Permohonan</h1>
-        </div>
+      <AppHeader variant="admin" />
 
-        {/* Info */}
-        <div className="bg-card rounded-xl border border-border shadow-sm p-6">
-          <h2 className="text-lg font-heading font-bold text-foreground mb-4">Informasi Permohonan</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <InfoRow label="Nomor Permohonan" value={submission.submissionNumber} />
-            <InfoRow label="Nama LPK" value={submission.organizationName} />
-            <InfoRow label="Terakhir Diperbarui" value={submission.lastUpdated} />
-          </div>
-        </div>
+	      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 relative z-10">
+          <div className="app-section-stack max-w-6xl mx-auto w-full">
+	        <div className="flex items-center gap-4">
+	          <button
+	            type="button"
+	            aria-label="Kembali ke dashboard admin"
+	            title="Kembali ke dashboard admin"
+	            onClick={() => navigate("/admin")}
+	            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-500 shadow-sm transition-colors hover:bg-white hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20"
+	          >
+	            <ArrowLeft className="w-5 h-5" />
+	          </button>
+	          <div className="max-w-2xl">
+	            <h1 className="app-page-title text-2xl">Kelola Permohonan</h1>
+	            <p className="mt-0.5 text-sm font-medium leading-relaxed text-slate-500">Pantau dan verifikasi setiap tahapan permohonan secara lebih detail.</p>
+	          </div>
+	        </div>
+
+        <SummaryCard
+          submissionNumber={submission.submissionNumber}
+          submissionType={submission.submissionType}
+          organizationName={submission.organizationName}
+          kbli={submission.kbli}
+          nib={submission.nib}
+          currentStatus={displayStatus?.label || "-"}
+          licenseStatus={deriveLicenseStatusLabel(submission)}
+          lastUpdated={submission.lastUpdated}
+        />
 
         {/* Stepper */}
-        <ProgressStepper stages={stages} selectedIndex={selectedStage} onStageClick={setSelectedStage} />
+        <ProgressStepper stages={stages} selectedIndex={selectedStage} onStageClick={handleStageClick} />
 
         {/* Stage Detail */}
-        <StageDetailAdmin submission={submission} stageIndex={selectedStage} stages={stages} />
+        <div aria-busy={isStageLoading}>
+          {isStageLoading ? (
+            <AdminStageDetailSkeleton />
+          ) : (
+            <Suspense fallback={<AdminStageDetailSkeleton />}>
+              <StageDetailAdmin submission={submission} stageIndex={selectedStage} stages={stages} />
+            </Suspense>
+          )}
+        </div>
+        </div>
       </main>
     </div>
   );
 };
 
-const InfoRow = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <p className="text-xs text-muted-foreground">{label}</p>
-    <p className="font-medium text-foreground">{value}</p>
+const AdminStageDetailSkeleton = () => (
+  <div className="app-surface-card p-5 sm:p-8" aria-hidden="true">
+    <Skeleton className="h-7 w-40 rounded-xl" />
+    <div className="mt-6 space-y-4">
+      <Skeleton className="h-20 w-full rounded-2xl" />
+      <Skeleton className="h-20 w-full rounded-2xl" />
+      <Skeleton className="h-20 w-full rounded-2xl" />
+    </div>
   </div>
 );
 
 export default AdminKelola;
+

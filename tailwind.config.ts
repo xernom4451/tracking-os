@@ -79,6 +79,12 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        glass: "0 8px 32px 0 rgba(79, 107, 245, 0.05)",
+        "glass-hover": "0 12px 40px 0 rgba(79, 107, 245, 0.1)",
+        subtle: "0 4px 20px -2px rgba(0, 0, 0, 0.03)",
+        elevated: "0 12px 35px -5px rgba(0, 0, 0, 0.08)",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
@@ -92,13 +98,21 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
         },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(20px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-soft": "pulse-soft 2s ease-in-out infinite",
+        "fade-in-up": "fade-in-up 0.5s ease-out",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("tailwindcss-animate"),
+  ],
 } satisfies Config;

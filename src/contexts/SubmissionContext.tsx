@@ -1,246 +1,663 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import type { SubmissionData, DocumentStatus } from "@/data/mockData";
-import { formatTimestamp, formatTimelineNow } from "@/data/mockData";
+import { useEffect, useState, ReactNode } from "react";
+import type {
+  SubmissionData,
+  SubmissionType,
+  DocumentUploadEntry,
+  DocumentUploadPhase,
+  DecisionStatus,
+  LicenseStatus,
+  TimelineEvent,
+} from "@/data/mockData";
+import {
+  formatTimestamp,
+  formatTimelineNow,
+  hasUploadedRevisionAfterLatestRequest,
+  hasApprovalDraftReadyForIssuance,
+  normalizePbUmkuNumber,
+} from "@/data/mockData";
+import { SubmissionContext } from "@/contexts/submission-context.shared";
+import { initialSubmissions } from "@/data/initialSubmissions";
+import { buildReviewDocuments } from "@/data/submissionDocuments";
+import {
+  findSubmissionBySubmissionNumber as findSubmissionBySubmissionNumberHelper,
+  getCurrentActor as getCurrentActorHelper,
+  normalizeLicenseStatus as normalizeLicenseStatusHelper,
+  normalizeNib,
+  normalizeSubmissionType as normalizeSubmissionTypeHelper,
+} from "@/lib/submission-domain";
+import { normalizeKbliCode } from "@/data/kbliOptions";
+import {
+  createSessionDecisionEvents,
+  createSessionSummaryEvent,
+  getNextSessionNumber,
+  normalizeSessionDecisions,
+} from "@/lib/submission-sessions";
+import {
+  appendHistoryIfChanged as appendHistoryIfChangedHelper,
+  loadStoredSubmissions as loadStoredSubmissionsHelper,
+  normalizeLegacyDocumentStatus as normalizeLegacyDocumentStatusHelper,
+} from "@/lib/submission-storage";
+import { api, AUTH_TOKEN_STORAGE_KEY, isApiEnabled } from "@/lib/api";
 
 export interface AdminSubmission extends SubmissionData {
   id: string;
 }
 
-const initialSubmissions: AdminSubmission[] = [
-  {
-    id: "1",
-    submissionNumber: "OSS-2024-PB-00847",
-    organizationName: "LPK Karya Mandiri Internasional",
-    lastUpdated: "22 Februari 2026, 14:35 WIB",
-    pengajuanConfirmed: true,
-    pengajuanDate: "20 Februari 2026",
-    documents: [
-      { name: "Surat Permohonan Izin", status: "approved" },
-      { name: "Salinan Izin Usaha", status: "approved" },
-      { name: "Salinan Akreditasi", status: "revision_required", note: "Sertifikat sudah kadaluarsa, harap unggah yang terbaru." },
-      { name: "Perjanjian Kerja Sama Luar Negeri", status: "locked" },
-      { name: "Program Pemagangan", status: "locked" },
-      { name: "Rencana Penempatan Pasca Pemagangan", status: "locked" },
-      { name: "Profil LPK", status: "locked" },
-      { name: "Draft Perjanjian Pemagangan", status: "locked" },
-    ],
-    reviewNotes: "",
-    reviewCompleted: false,
-    approvalCompleted: false,
-    approvalDate: "",
-    licenseIssued: false,
-    licenseNumber: "",
-    licenseDate: "",
-    timeline: [
-      { date: "22 Feb 2026", time: "14:35", description: "Permintaan revisi: Sertifikat Akreditasi kadaluarsa", type: "error" },
-      { date: "22 Feb 2026", time: "10:12", description: "Salinan Izin Usaha disetujui", type: "success" },
-      { date: "21 Feb 2026", time: "16:40", description: "Surat Permohonan disetujui", type: "success" },
-      { date: "21 Feb 2026", time: "09:00", description: "Verifikasi dokumen dimulai", type: "info" },
-      { date: "20 Feb 2026", time: "15:22", description: "Pengajuan berhasil dibuat", type: "info" },
-    ],
-  },
-  {
-    id: "2",
-    submissionNumber: "OSS-2024-PB-00912",
-    organizationName: "LPK Nusantara Global",
-    lastUpdated: "21 Februari 2026, 10:00 WIB",
-    pengajuanConfirmed: true,
-    pengajuanDate: "18 Februari 2026",
-    documents: [
-      { name: "Surat Permohonan Izin", status: "approved" },
-      { name: "Salinan Izin Usaha", status: "approved" },
-      { name: "Salinan Akreditasi", status: "approved" },
-      { name: "Perjanjian Kerja Sama Luar Negeri", status: "approved" },
-      { name: "Program Pemagangan", status: "approved" },
-      { name: "Rencana Penempatan Pasca Pemagangan", status: "approved" },
-      { name: "Profil LPK", status: "approved" },
-      { name: "Draft Perjanjian Pemagangan", status: "approved" },
-    ],
-    reviewNotes: "",
-    reviewCompleted: false,
-    approvalCompleted: false,
-    approvalDate: "",
-    licenseIssued: false,
-    licenseNumber: "",
-    licenseDate: "",
-    timeline: [
-      { date: "21 Feb 2026", time: "10:00", description: "Peninjauan dokumen dimulai", type: "info" },
-      { date: "20 Feb 2026", time: "14:00", description: "Semua dokumen disetujui", type: "success" },
-      { date: "18 Feb 2026", time: "09:00", description: "Pengajuan berhasil dibuat", type: "info" },
-    ],
-  },
-  {
-    id: "3",
-    submissionNumber: "OSS-2024-PB-00955",
-    organizationName: "LPK Maju Bersama",
-    lastUpdated: "19 Februari 2026, 16:00 WIB",
-    pengajuanConfirmed: true,
-    pengajuanDate: "15 Februari 2026",
-    documents: [
-      { name: "Surat Permohonan Izin", status: "approved" },
-      { name: "Salinan Izin Usaha", status: "approved" },
-      { name: "Salinan Akreditasi", status: "approved" },
-      { name: "Perjanjian Kerja Sama Luar Negeri", status: "approved" },
-      { name: "Program Pemagangan", status: "approved" },
-      { name: "Rencana Penempatan Pasca Pemagangan", status: "approved" },
-      { name: "Profil LPK", status: "approved" },
-      { name: "Draft Perjanjian Pemagangan", status: "approved" },
-    ],
-    reviewNotes: "Semua dokumen telah ditinjau dan sesuai persyaratan.",
-    reviewCompleted: true,
-    approvalCompleted: true,
-    approvalDate: "18 Februari 2026",
-    licenseIssued: true,
-    licenseNumber: "IMT-2026-00123",
-    licenseDate: "19 Februari 2026",
-    timeline: [
-      { date: "19 Feb 2026", time: "16:00", description: "Izin terbit: IMT-2026-00123", type: "success" },
-      { date: "18 Feb 2026", time: "11:00", description: "Permohonan disetujui", type: "success" },
-      { date: "17 Feb 2026", time: "14:00", description: "Peninjauan selesai", type: "success" },
-      { date: "17 Feb 2026", time: "09:00", description: "Pengajuan berhasil dibuat", type: "info" },
-    ],
-  },
-  {
-    id: "4",
-    submissionNumber: "OSS-2024-PB-01001",
-    organizationName: "LPK Harapan Bangsa",
-    lastUpdated: "23 Februari 2026, 08:00 WIB",
-    pengajuanConfirmed: false,
-    pengajuanDate: "23 Februari 2026",
-    documents: [
-      { name: "Surat Permohonan Izin", status: "locked" },
-      { name: "Salinan Izin Usaha", status: "locked" },
-      { name: "Salinan Akreditasi", status: "locked" },
-      { name: "Perjanjian Kerja Sama Luar Negeri", status: "locked" },
-      { name: "Program Pemagangan", status: "locked" },
-      { name: "Rencana Penempatan Pasca Pemagangan", status: "locked" },
-      { name: "Profil LPK", status: "locked" },
-      { name: "Draft Perjanjian Pemagangan", status: "locked" },
-    ],
-    reviewNotes: "",
-    reviewCompleted: false,
-    approvalCompleted: false,
-    approvalDate: "",
-    licenseIssued: false,
-    licenseNumber: "",
-    licenseDate: "",
-    timeline: [
-      { date: "23 Feb 2026", time: "08:00", description: "Pengajuan berhasil dibuat", type: "info" },
-    ],
-  },
-];
+const SUBMISSION_STORAGE_KEY = "tracking-os-submissions";
+const DEFAULT_OSS_STATUS = "Menunggu Verifikasi K/L";
+const AUTH_USER_STORAGE_KEY = "tracking-os-auth-user";
+const readStoredSubmissions = () =>
+  loadStoredSubmissionsHelper(SUBMISSION_STORAGE_KEY, initialSubmissions, DEFAULT_OSS_STATUS);
 
-interface SubmissionContextType {
-  submissions: AdminSubmission[];
-  getSubmission: (id: string) => AdminSubmission | undefined;
-  findByNumber: (num: string) => AdminSubmission | undefined;
-  confirmPengajuan: (id: string) => void;
-  updateDocStatus: (id: string, docIndex: number, status: DocumentStatus, note?: string) => void;
-  completeReview: (id: string, notes: string) => void;
-  approveApplication: (id: string) => void;
-  issueLicense: (id: string, licenseNumber: string, licenseDate: string) => void;
+export interface NewSubmissionInput {
+  submissionNumber: string;
+  submissionType: SubmissionType;
+  organizationName: string;
+  kbli: string;
+  nib: string;
+  pengajuanDate: string;
 }
 
-const SubmissionContext = createContext<SubmissionContextType | null>(null);
+export interface SessionDecisionInput {
+  status: DecisionStatus;
+  note?: string;
+}
 
-export const useSubmissions = () => {
-  const ctx = useContext(SubmissionContext);
-  if (!ctx) throw new Error("useSubmissions must be used within SubmissionProvider");
-  return ctx;
-};
+export interface ApprovalFinalizeInput {
+  approvalDate: string;
+  pbUmkuNumber: string;
+  skFileName: string;
+  skFileSizeBytes: number;
+  file?: File;
+}
+
+export interface LicenseIssuanceInput {
+  status: LicenseStatus;
+}
+
+export interface RevisionUploadInput {
+  fileName: string;
+  fileSizeBytes: number;
+  file?: File;
+}
 
 export const SubmissionProvider = ({ children }: { children: ReactNode }) => {
-  const [submissions, setSubmissions] = useState<AdminSubmission[]>(initialSubmissions);
+  const [submissions, setSubmissions] = useState<AdminSubmission[]>(() =>
+    isApiEnabled ? [] : readStoredSubmissions(),
+  );
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(isApiEnabled);
+
+  const replaceSubmission = (submission: AdminSubmission) => {
+    setSubmissions((prev) => {
+      const exists = prev.some((item) => item.id === submission.id);
+      if (!exists) return [submission, ...prev];
+      return prev.map((item) => (item.id === submission.id ? submission : item));
+    });
+  };
+
+  const refreshSubmissionsFromApi = () => {
+    if (!isApiEnabled || typeof window === "undefined") return;
+    if (!window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)) {
+      api.listPublicSubmissions()
+        .then(setSubmissions)
+        .catch((error) => {
+          console.error("Gagal memuat data publik dari API.", error);
+        })
+        .finally(() => {
+          setIsLoadingSubmissions(false);
+        });
+      return;
+    }
+
+    setIsLoadingSubmissions(true);
+    api.listSubmissions()
+      .then(setSubmissions)
+      .catch((error) => {
+        console.error("Gagal memuat data permohonan dari API.", error);
+      })
+      .finally(() => {
+        setIsLoadingSubmissions(false);
+      });
+  };
 
   const mutate = (id: string, updater: (s: AdminSubmission) => AdminSubmission) => {
     setSubmissions((prev) => prev.map((s) => (s.id === id ? updater(s) : s)));
   };
 
   const getSubmission = (id: string) => submissions.find((s) => s.id === id);
-  const findByNumber = (num: string) =>
-    submissions.find((s) => s.submissionNumber.toLowerCase() === num.toLowerCase());
+  const findBySubmissionNumber = (num: string) => {
+    if (isApiEnabled) {
+      return api.trackSubmission(num)
+        .then((submission) => {
+          replaceSubmission(submission);
+          return submission;
+        })
+        .catch(() => undefined);
+    }
 
-  const confirmPengajuan = (id: string) => {
-    const t = formatTimelineNow();
-    mutate(id, (s) => ({
-      ...s,
-      pengajuanConfirmed: true,
-      lastUpdated: formatTimestamp(),
-      documents: s.documents.map((d, i) =>
-        i === 0 ? { ...d, status: "under_review" as DocumentStatus } : d
-      ),
-      timeline: [{ date: t.date, time: t.time, description: "Pengajuan dikonfirmasi, verifikasi dokumen dimulai", type: "info" as const }, ...s.timeline],
-    }));
+    const fromState = findSubmissionBySubmissionNumberHelper(submissions, num);
+    if (fromState) return fromState;
+
+    if (typeof window !== "undefined") {
+      const fromStorage = findSubmissionBySubmissionNumberHelper(readStoredSubmissions(), num);
+      if (fromStorage) return fromStorage;
+    }
+
+    return undefined;
   };
 
-  const updateDocStatus = (id: string, docIndex: number, status: DocumentStatus, note?: string) => {
+  const addSubmission = (input: NewSubmissionInput) => {
+    if (isApiEnabled) {
+      api.createSubmission(input)
+        .then((submission) => replaceSubmission(submission))
+        .catch((error) => console.error("Gagal menambahkan permohonan.", error));
+      return;
+    }
+
     const t = formatTimelineNow();
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
+    const newId = String(Date.now());
+    const newSubmission: AdminSubmission = {
+      id: newId,
+      submissionNumber: input.submissionNumber.trim(),
+      submissionType: normalizeSubmissionTypeHelper(input.submissionType),
+      organizationName: input.organizationName.trim(),
+      nib: normalizeNib(input.nib),
+      kbli: normalizeKbliCode(input.kbli),
+      ossStatus: DEFAULT_OSS_STATUS,
+      pengajuanDate: input.pengajuanDate,
+      lastUpdated: formatTimestamp(),
+      pengajuanConfirmed: false,
+      verificationCompleted: false,
+      documents: buildReviewDocuments("locked"),
+      reviewNotes: "",
+      reviewCompleted: false,
+      approvalCompleted: false,
+      approvalDate: "",
+      licenseIssued: false,
+      licenseStatus: "",
+      licenseNumber: "",
+      licenseDate: "",
+      skFileName: "",
+      skFileSizeBytes: 0,
+      reviewCycle: 1,
+      reviewDocuments: buildReviewDocuments("locked"),
+      verificationWorklistDocNumbers: [],
+      timeline: [
+        {
+          date: t.date,
+          time: t.time,
+          actor,
+          phase: "PENGAJUAN",
+          description: "Data permohonan berhasil dibuat.",
+          type: "info" as const,
+        },
+      ],
+    };
+    setSubmissions((prev) => [newSubmission, ...prev]);
+  };
+
+  const updatePengajuanData = (id: string, input: NewSubmissionInput) => {
+    if (isApiEnabled) {
+      api.updateSubmission(id, input)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal memperbarui data pengajuan.", error));
+      return;
+    }
+
     mutate(id, (s) => {
-      const docs = [...s.documents];
-      docs[docIndex] = { ...docs[docIndex], status, note: status === "revision_required" ? note : undefined };
+      const cleanInput = {
+        submissionNumber: input.submissionNumber.trim(),
+        submissionType: normalizeSubmissionTypeHelper(input.submissionType),
+        organizationName: input.organizationName.trim(),
+        nib: normalizeNib(input.nib),
+        kbli: normalizeKbliCode(input.kbli),
+        pengajuanDate: input.pengajuanDate.trim(),
+      };
 
-      // Enforce sequential: lock everything after a non-approved doc
-      let lockRest = false;
-      for (let i = 0; i < docs.length; i++) {
-        if (lockRest) {
-          docs[i] = { ...docs[i], status: "locked", note: undefined };
-        } else if (docs[i].status !== "approved") {
-          lockRest = true;
-        }
-      }
+      const hasChanges = s.submissionNumber !== cleanInput.submissionNumber
+        || s.submissionType !== cleanInput.submissionType
+        || s.organizationName !== cleanInput.organizationName
+        || s.nib !== cleanInput.nib
+        || s.kbli !== cleanInput.kbli
+        || s.pengajuanDate !== cleanInput.pengajuanDate;
 
-      const docName = s.documents[docIndex].name;
-      let desc = "";
-      if (status === "approved") desc = `${docName} disetujui`;
-      else if (status === "under_review") desc = `${docName} sedang diverifikasi`;
-      else if (status === "revision_required") desc = `Permintaan revisi: ${docName}`;
+      if (!hasChanges) return s;
 
       return {
         ...s,
-        documents: docs,
+        submissionNumber: cleanInput.submissionNumber,
+        submissionType: cleanInput.submissionType,
+        organizationName: cleanInput.organizationName,
+        nib: cleanInput.nib,
+        kbli: cleanInput.kbli,
+        pengajuanDate: cleanInput.pengajuanDate,
         lastUpdated: formatTimestamp(),
-        timeline: desc ? [{ date: t.date, time: t.time, description: desc, type: status === "revision_required" ? "error" as const : status === "approved" ? "success" as const : "info" as const }, ...s.timeline] : s.timeline,
       };
     });
   };
 
-  const completeReview = (id: string, notes: string) => {
+  const deleteSubmission = (id: string) => {
+    if (isApiEnabled) {
+      api.deleteSubmission(id)
+        .then(() => setSubmissions((prev) => prev.filter((s) => s.id !== id)))
+        .catch((error) => console.error("Gagal menghapus permohonan.", error));
+      return;
+    }
+
+    setSubmissions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const confirmPengajuan = (id: string) => {
+    if (isApiEnabled) {
+      api.confirmPengajuan(id)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal mengonfirmasi pengajuan.", error));
+      return;
+    }
+
     const t = formatTimelineNow();
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
     mutate(id, (s) => ({
       ...s,
-      reviewNotes: notes,
-      reviewCompleted: true,
+      pengajuanConfirmed: true,
+      verificationCompleted: false,
       lastUpdated: formatTimestamp(),
-      timeline: [{ date: t.date, time: t.time, description: "Peninjauan dokumen selesai", type: "success" as const }, ...s.timeline],
+      timeline: [
+        ...s.timeline,
+        {
+          date: t.date,
+          time: t.time,
+          actor,
+          phase: "PENGAJUAN",
+          description: "Pengajuan dikonfirmasi. Tahap Verifikasi Dokumen dimulai.",
+          type: "info" as const,
+        },
+      ],
     }));
   };
 
-  const approveApplication = (id: string) => {
+  const uploadRevisionDocument = (
+    id: string,
+    phase: DocumentUploadPhase,
+    documentNumber: number,
+    input: RevisionUploadInput,
+  ) => {
+    if (isApiEnabled) {
+      api.uploadRevisionDocument(id, phase, documentNumber, input)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal mengunggah metadata revisi.", error));
+      return;
+    }
+
+    const cleanName = input.fileName.trim();
+    const cleanSize = Number.isFinite(input.fileSizeBytes) && input.fileSizeBytes > 0
+      ? input.fileSizeBytes
+      : 0;
+
+    if (!cleanName || cleanSize <= 0 || !Number.isInteger(documentNumber)) return;
+
     const t = formatTimelineNow();
-    const dateStr = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-    mutate(id, (s) => ({
-      ...s,
-      approvalCompleted: true,
-      approvalDate: dateStr,
-      lastUpdated: formatTimestamp(),
-      timeline: [{ date: t.date, time: t.time, description: "Permohonan disetujui", type: "success" as const }, ...s.timeline],
-    }));
+    mutate(id, (s) => {
+      const docs = phase === "VERIFIKASI" ? s.documents : s.reviewDocuments;
+      const targetDoc = docs[documentNumber - 1];
+
+      if (!targetDoc) return s;
+      if (normalizeLegacyDocumentStatusHelper(String(targetDoc.status)) !== "revision_required") return s;
+
+      const nextUpload: DocumentUploadEntry = {
+        fileName: cleanName,
+        fileSizeBytes: cleanSize,
+        date: t.date,
+        time: t.time,
+        phase,
+      };
+
+      const nextDocs = docs.map((doc, index) => {
+        if (index !== documentNumber - 1) return doc;
+        return {
+          ...doc,
+          uploads: [...(doc.uploads || []), nextUpload],
+        };
+      });
+
+      const nextTimelineEvent: TimelineEvent = {
+        date: t.date,
+        time: t.time,
+        actor: "Pemohon",
+        phase,
+        documentNumber,
+        description: `Dokumen perbaikan untuk ${targetDoc.name} diunggah: ${cleanName}.`,
+        type: "info",
+      };
+
+      if (phase === "VERIFIKASI") {
+        return {
+          ...s,
+          documents: nextDocs,
+          lastUpdated: formatTimestamp(),
+          timeline: [...s.timeline, nextTimelineEvent],
+        };
+      }
+
+      return {
+        ...s,
+        reviewDocuments: nextDocs,
+        lastUpdated: formatTimestamp(),
+        timeline: [...s.timeline, nextTimelineEvent],
+      };
+    });
   };
 
-  const issueLicense = (id: string, licenseNumber: string, licenseDate: string) => {
+  const submitVerificationSession = (id: string, decisions: SessionDecisionInput[]) => {
+    if (isApiEnabled) {
+      api.submitVerificationSession(id, decisions)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal menyimpan sesi verifikasi.", error));
+      return;
+    }
+
     const t = formatTimelineNow();
-    mutate(id, (s) => ({
-      ...s,
-      licenseIssued: true,
-      licenseNumber,
-      licenseDate,
-      lastUpdated: formatTimestamp(),
-      timeline: [{ date: t.date, time: t.time, description: `Izin terbit: ${licenseNumber}`, type: "success" as const }, ...s.timeline],
-    }));
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
+    mutate(id, (s) => {
+      if (!s.pengajuanConfirmed || s.verificationCompleted) return s;
+      const reuploadedDocNumbers = s.documents
+        .map((doc, index) => ({
+          doc,
+          docNumber: index + 1,
+        }))
+        .filter(({ doc, docNumber }) => doc.status === "revision_required"
+          && hasUploadedRevisionAfterLatestRequest(s.timeline, docNumber, "VERIFIKASI"))
+        .map(({ docNumber }) => docNumber);
+      const normalized = normalizeSessionDecisions(decisions, s.documents.length, {
+        requireRevisionNote: true,
+        requireRevisionNoteForDocNumbers: reuploadedDocNumbers,
+      });
+      if (!normalized) return s;
+
+      const effectiveDecisions = normalized;
+
+      const nextDocuments = s.documents.map((doc, index) =>
+        appendHistoryIfChangedHelper(
+          doc,
+          effectiveDecisions[index].status,
+          effectiveDecisions[index].note,
+          t,
+          true,
+        ),
+      );
+      const hasRevision = effectiveDecisions.some((decision) => decision.status === "revision_required");
+      const nextRevisionDocNumbers = effectiveDecisions
+        .map((decision, index) => ({ decision, docNumber: index + 1 }))
+        .filter(({ decision }) => decision.status === "revision_required")
+        .map(({ docNumber }) => docNumber);
+      const sessionNumber = getNextSessionNumber(s.timeline, "VERIFIKASI");
+
+      const decisionEvents = createSessionDecisionEvents(
+        "VERIFIKASI",
+        sessionNumber,
+        effectiveDecisions,
+        nextDocuments,
+        t,
+        actor,
+      );
+      const movesToNextPhase = !hasRevision;
+
+      return {
+        ...s,
+        documents: nextDocuments,
+        verificationCompleted: movesToNextPhase,
+        reviewCompleted: false,
+        approvalCompleted: false,
+        approvalDate: "",
+        licenseIssued: false,
+        licenseStatus: "",
+        licenseNumber: "",
+        licenseDate: "",
+        skFileName: "",
+        skFileSizeBytes: 0,
+        verificationWorklistDocNumbers: hasRevision ? nextRevisionDocNumbers : [],
+        lastRevisionCarryover: undefined,
+        lastUpdated: formatTimestamp(),
+        timeline: [
+          ...s.timeline,
+          ...decisionEvents,
+          createSessionSummaryEvent(
+            "VERIFIKASI",
+            sessionNumber,
+            effectiveDecisions,
+            nextDocuments,
+            t,
+            actor,
+            hasRevision,
+          ),
+        ],
+      };
+    });
   };
+
+  const submitReviewSession = (id: string, decisions: SessionDecisionInput[]) => {
+    if (isApiEnabled) {
+      api.submitReviewSession(id, decisions)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal menyimpan sesi peninjauan.", error));
+      return;
+    }
+
+    const t = formatTimelineNow();
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
+    mutate(id, (s) => {
+      if (!s.verificationCompleted || s.reviewCompleted) return s;
+      const reuploadedDocNumbers = s.reviewDocuments
+        .map((doc, index) => ({
+          doc,
+          docNumber: index + 1,
+        }))
+        .filter(({ doc, docNumber }) => doc.status === "revision_required"
+          && hasUploadedRevisionAfterLatestRequest(s.timeline, docNumber, "PENINJAUAN"))
+        .map(({ docNumber }) => docNumber);
+      const normalized = normalizeSessionDecisions(decisions, s.reviewDocuments.length, {
+        requireRevisionNote: false,
+        requireRevisionNoteForDocNumbers: reuploadedDocNumbers,
+      });
+      if (!normalized) return s;
+
+      const effectiveDecisions = normalized;
+
+      const nextReviewDocuments = s.reviewDocuments.map((doc, index) =>
+        appendHistoryIfChangedHelper(
+          doc,
+          effectiveDecisions[index].status,
+          effectiveDecisions[index].note,
+          t,
+          true,
+        ),
+      );
+      const hasRevision = effectiveDecisions.some((decision) => decision.status === "revision_required");
+      const sessionNumber = getNextSessionNumber(s.timeline, "PENINJAUAN");
+      const revisionDocNumbers = effectiveDecisions
+        .map((decision, index) => ({ decision, docNumber: index + 1 }))
+        .filter(({ decision }) => decision.status === "revision_required")
+        .map(({ docNumber }) => docNumber);
+
+      const decisionEvents = createSessionDecisionEvents(
+        "PENINJAUAN",
+        sessionNumber,
+        effectiveDecisions,
+        nextReviewDocuments,
+        t,
+        actor,
+      );
+      const movesToNextPhase = !hasRevision;
+
+      return {
+        ...s,
+        reviewDocuments: nextReviewDocuments,
+        reviewCompleted: movesToNextPhase,
+        reviewNotes: hasRevision
+          ? `Masih terdapat dokumen yang memerlukan perbaikan: ${revisionDocNumbers.join(", ")}.`
+          : "Seluruh dokumen pada tahap peninjauan dinyatakan sesuai persyaratan.",
+        approvalCompleted: false,
+        approvalDate: "",
+        licenseIssued: false,
+        licenseStatus: "",
+        licenseNumber: "",
+        licenseDate: "",
+        skFileName: "",
+        skFileSizeBytes: 0,
+        lastUpdated: formatTimestamp(),
+        timeline: [
+          ...s.timeline,
+          ...decisionEvents,
+          createSessionSummaryEvent(
+            "PENINJAUAN",
+            sessionNumber,
+            effectiveDecisions,
+            nextReviewDocuments,
+            t,
+            actor,
+            hasRevision,
+          ),
+        ],
+      };
+    });
+  };
+
+  const finalizeApproval = (id: string, input: ApprovalFinalizeInput) => {
+    if (isApiEnabled) {
+      api.finalizeApproval(id, input)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal menyimpan persetujuan.", error));
+      return;
+    }
+
+    const cleanApprovalDate = input.approvalDate.trim();
+    const cleanNumber = normalizePbUmkuNumber(input.pbUmkuNumber);
+    const cleanFileName = input.skFileName.trim();
+    const cleanSize = Number.isFinite(input.skFileSizeBytes) && input.skFileSizeBytes > 0
+      ? input.skFileSizeBytes
+      : 0;
+    const hasDuplicateNumber = submissions.some(
+      (submission) => submission.id !== id && normalizePbUmkuNumber(submission.licenseNumber || "") === cleanNumber,
+    );
+
+    if (!cleanApprovalDate || !cleanNumber || !cleanFileName || cleanSize <= 0) return;
+    if (!cleanFileName.toLowerCase().endsWith(".pdf")) return;
+    if (hasDuplicateNumber) return;
+
+    const t = formatTimelineNow();
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
+    mutate(id, (s) => {
+      if (!s.reviewCompleted || s.licenseIssued) return s;
+      return {
+        ...s,
+        ossStatus: "Izin Terbit",
+        approvalCompleted: true,
+        approvalDate: cleanApprovalDate,
+        licenseIssued: false,
+        licenseStatus: "",
+        licenseNumber: cleanNumber,
+        licenseDate: "",
+        skFileName: cleanFileName,
+        skFileSizeBytes: cleanSize,
+        lastUpdated: formatTimestamp(),
+        timeline: [
+          ...s.timeline,
+          {
+            date: t.date,
+            time: t.time,
+            actor,
+            phase: "PERSETUJUAN",
+            description: "Data persetujuan disimpan. Lanjut ke Izin Terbit untuk menetapkan status izin.",
+            type: "success" as const,
+          },
+        ],
+      };
+    });
+  };
+
+  const issueLicense = (id: string, input: LicenseIssuanceInput) => {
+    if (isApiEnabled) {
+      api.issueLicense(id, input)
+        .then(replaceSubmission)
+        .catch((error) => console.error("Gagal menerbitkan izin.", error));
+      return;
+    }
+
+    const cleanStatus = normalizeLicenseStatusHelper(input.status);
+    if (!cleanStatus) return;
+
+    const t = formatTimelineNow();
+    const actor = getCurrentActorHelper(AUTH_USER_STORAGE_KEY);
+    const issuedAt = formatTimestamp();
+    mutate(id, (s) => {
+      if (!s.approvalCompleted || s.licenseIssued) return s;
+      if (!hasApprovalDraftReadyForIssuance(s)) return s;
+
+      return {
+        ...s,
+        ossStatus: "Izin Terbit",
+        licenseIssued: true,
+        licenseStatus: cleanStatus,
+        licenseDate: issuedAt,
+        lastUpdated: issuedAt,
+        timeline: [
+          ...s.timeline,
+          {
+            date: t.date,
+            time: t.time,
+            actor,
+            phase: "IZIN_TERBIT",
+            description: `Izin PB UMKU diterbitkan dengan status ${cleanStatus}.`,
+            type: "success" as const,
+          },
+        ],
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isApiEnabled) return;
+    window.localStorage.setItem(SUBMISSION_STORAGE_KEY, JSON.stringify(submissions));
+  }, [submissions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isApiEnabled) {
+      refreshSubmissionsFromApi();
+      window.addEventListener("tracking-os-auth-changed", refreshSubmissionsFromApi);
+      window.addEventListener("focus", refreshSubmissionsFromApi);
+      return () => {
+        window.removeEventListener("tracking-os-auth-changed", refreshSubmissionsFromApi);
+        window.removeEventListener("focus", refreshSubmissionsFromApi);
+      };
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== SUBMISSION_STORAGE_KEY) return;
+      setSubmissions(readStoredSubmissions());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   return (
-    <SubmissionContext.Provider value={{ submissions, getSubmission, findByNumber, confirmPengajuan, updateDocStatus, completeReview, approveApplication, issueLicense }}>
+    <SubmissionContext.Provider value={{
+      submissions,
+      isLoadingSubmissions,
+      getSubmission,
+      findBySubmissionNumber,
+      addSubmission,
+      updatePengajuanData,
+      deleteSubmission,
+      confirmPengajuan,
+      uploadRevisionDocument,
+      submitVerificationSession,
+      submitReviewSession,
+      finalizeApproval,
+      issueLicense,
+    }}>
       {children}
     </SubmissionContext.Provider>
   );

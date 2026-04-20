@@ -23,7 +23,7 @@ function useChart() {
   const context = React.useContext(ChartContext);
 
   if (!context) {
-    throw new Error("useChart must be used within a <ChartContainer />");
+    throw new Error("useChart harus digunakan di dalam komponen <ChartContainer />.");
   }
 
   return context;
