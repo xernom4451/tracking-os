@@ -1,56 +1,33 @@
-Tujuan: membuatkan satu project brief / project overview document yang bersih dan siap pakai untuk presentasi stakeholder, berdasarkan kondisi codebase dan fitur Tracking OS saat ini.
+## Rencana: Buat PDF Project Overview
 
-Isi brief yang akan dibuat:
+Membuat dokumen PDF berisi penjelasan lengkap proyek **Sistem Tracking PB UMKU** yang dapat langsung diunduh dan dipakai untuk menjelaskan proyek di AI builder baru atau ke stakeholder.
 
-1. Executive Summary
-   - Nama project: Tracking OS
-   - Tagline: sistem pelacakan dan pengelolaan permohonan izin PB UMKU/OSS untuk penyelenggaraan pemagangan luar negeri.
-   - Tujuan utama: transparansi progres untuk pemohon + alur kerja terstruktur untuk petugas admin.
+### Isi PDF (Bahasa Indonesia)
 
-2. Problem Statement
-   - Proses PB UMKU memerlukan banyak dokumen dan tahapan.
-   - Pemohon sulit mengetahui status permohonan secara real-time.
-   - Petugas perlu alat bantu agar tidak melewati tahapan atau dokumen.
+1. **Cover / Judul** — Sistem Tracking PB UMKU (Overseas Internship Permit via OSS)
+2. **Latar Belakang & Tujuan** — masalah transparansi proses PB UMKU, posisi sistem sebagai *tracking layer* (bukan workflow utama)
+3. **Ruang Lingkup** — apa yang termasuk & tidak termasuk
+4. **Aktor / Pengguna** — Publik (Pemohon) & Admin (Petugas)
+5. **Portal & Halaman**
+   - Public Portal (`/`) — pencarian & tracking
+   - Admin Portal (`/admin/login`, `/admin`, `/admin/kelola/:id`)
+6. **Alur Bisnis 5 Stage** — Pengajuan → Verifikasi Dokumen → Peninjauan → Persetujuan → Izin Terbit
+7. **Aturan Stage-Gated & Verifikasi Dokumen Berurutan** — 8 dokumen, urutan wajib, status Approved/Revisi/Pending
+8. **Konsep Status Visual** — 3 warna stepper: Hijau (Completed), Kuning (Active), Abu-abu (Locked)
+9. **Fitur Utama** — ringkasan Public & Admin
+10. **Arsitektur Teknis** — Vite + React + TypeScript + Tailwind + shadcn/ui, Context API, localStorage/demo backend
+11. **Struktur Komponen Kunci** — `ProgressStepper`, `StageDetailUser/Admin`, `DocumentList`, `Timeline`, `SubmissionContext`
+12. **Status Saat Ini & Keterbatasan** — prototype, mock data, tanpa auth produksi
+13. **Roadmap** — database produksi, auth aman, audit log, notifikasi
+14. **Penutup / Elevator Pitch**
 
-3. Solution Overview
-   - Portal publik read-only untuk tracking via nomor permohonan OSS.
-   - Portal admin dengan workflow stage-gated: Pengajuan → Verifikasi Dokumen → Peninjauan → Persetujuan → Izin Terbit.
-   - Verifikasi dokumen bersifat sequential: dokumen ke-N baru diproses setelah dokumen ke-(N-1) disetujui.
-   - Status tiap tahap otomatis (derived): hijau (selesai), kuning (aktif), abu-abu (terkunci).
+### Teknis Pembuatan
 
-4. Target Users & Roles
-   - Pemohon / Publik: mencari dan melihat status.
-   - Admin / Petugas: mengelola, memverifikasi, meninjau, menyetujui, menerbitkan izin.
+- Gunakan Python `reportlab` dengan font Unicode **DejaVu Sans** (agar karakter Indonesia aman)
+- Warna aksen mengikuti brand proyek: navy/slate + status hijau/kuning/abu
+- Layout: cover halaman 1, lalu konten multi-halaman dengan heading, paragraf, dan bullet list rapi
+- Output: `/mnt/documents/Project-Overview-Tracking-PB-UMKU.pdf`
+- QA: render tiap halaman ke gambar, inspeksi visual (overflow, potongan teks, glyph hilang), perbaiki bila ada isu
+- Kirim ke user via `<presentation-artifact>` agar bisa langsung diunduh
 
-5. Key Features
-   - Search nomor permohonan OSS.
-   - Clickable stepper dengan detail tahap.
-   - Timeline / riwayat aktivitas.
-   - Verifikasi dokumen sequential dengan catatan perbaikan.
-   - Upload revisi dokumen dan file SK izin.
-   - Dashboard admin dengan statistik dan daftar permohonan.
-   - Persistence backend (JSON demo) atau localStorage fallback.
-
-6. Technical Stack
-   - Frontend: Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui.
-   - Routing: React Router.
-   - State: React Context + backend API / localStorage.
-   - Testing: Vitest + Testing Library.
-   - Backend demo: Node.js built-in + JSON file, opsional Supabase Storage.
-
-7. Workflow Detail
-   - Admin buat pengajuan → konfirmasi pengajuan → verifikasi 8 dokumen secara berurutan → peninjauan dengan catatan → persetujuan → penerbitan izin dengan nomor, tanggal, file PDF.
-
-8. Current State & Limitations
-   - Prototype: alur frontend sudah lengkap, test tersedia, build berhasil.
-   - Backend demo masih pakai JSON; production perlu PostgreSQL, JWT, audit log, validasi ketat.
-   - Login admin masih demo.
-
-9. Next Steps / Roadmap
-   - Integrasi file storage production.
-   - Autentikasi dan role-based access yang aman.
-   - Audit log immutable.
-   - Refactor domain workflow lebih modular.
-   - Testing integrasi routing dan error states.
-
-Deliverable: file `docs/PROJECT-BRIEF.md` (atau format lain sesuai permintaan) berisi seluruh poin di atas dalam Bahasa Indonesia dengan gaya formal pemerintah. Jika user ingin format lain (PDF, slide, one-pager HTML), akan disesuaikan.
+Tidak ada perubahan kode aplikasi — hanya menghasilkan artefak PDF.
